@@ -57,9 +57,27 @@ is_iso_install() {
     fi
 }
 
-# Check is port 80 in used (necessary for HTTPS)
+# Check if port 80 is in use (necessary for HTTPS)
+# Returns IS_PORT_USED=true only if port 80 or 443 is used by something OTHER than our HTTPS container
 is_port_used() {
-    lsof -i -P -n | grep ":80 (LISTEN)" &>/dev/null && IS_PORT_USED=true || IS_PORT_USED=false
+    # Check if port 80 or 443 is in use at all
+    local port80_used port443_used
+    lsof -i -P -n | grep ":80 (LISTEN)" &>/dev/null && port80_used=true || port80_used=false
+    lsof -i -P -n | grep ":443 (LISTEN)" &>/dev/null && port443_used=true || port443_used=false
+
+    if [ "$port80_used" = false ] && [ "$port443_used" = false ]; then
+        IS_PORT_USED=false
+        return
+    fi
+
+    # If either port is in use, check if it's our HTTPS container
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^DAppNodeCore-https.dnp.dappnode.eth$"; then
+        # Port 80 or 443 is used by our HTTPS container, so we consider it "not used" for package determination
+        IS_PORT_USED=false
+    else
+        # Port 80 or 443 is used by something else
+        IS_PORT_USED=true
+    fi
 }
 
 # Determine packages to be installed
